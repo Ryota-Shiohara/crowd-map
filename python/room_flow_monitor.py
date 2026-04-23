@@ -10,26 +10,31 @@ from matplotlib.animation import FuncAnimation
 
 from sensors import AccelSensor, DistanceSensor, LightSensor, PhotoSensor, PyroSensor
 
-# ===== Communication settings =====
+# ===== 通信設定 =====
 PORT = "COM3"
 BAUD_RATE = 115200
 DELIMITER = ","
 CHANNEL_COUNT = 5
 
-# ===== Visualization settings =====
+# ===== 可視化設定 =====
 MAX_POINTS = 100
 Y_MIN = 0
 Y_MAX = 1023
 
-# ===== Logging settings =====
-LOG_FILE = "sensor_log.csv"
-LOG_HEADERS = [
+# ===== ログ設定 =====
+SENSOR_LOG_FILE = "sensor_log.csv"
+SENSOR_LOG_HEADERS = [
     "timestamp",
     "sensor_distance",
     "sensor_accel",
     "sensor_photo",
     "sensor_light",
     "sensor_pyro",
+]
+
+EVENT_LOG_FILE = "event_log.csv"
+EVENT_LOG_HEADERS = [
+    "timestamp",
     "from_room",
     "to_room",
     "event_label",
@@ -39,54 +44,46 @@ LOG_HEADERS = [
     "count_O",
 ]
 
-# ===== Detection settings (temporary values; tune during on-site tests) =====
+# ===== 検知設定（暫定値。現地テストで調整） =====
 DISTANCE_PASS_THRESHOLD = 300
 ACCEL_DELTA_THRESHOLD = 80
 PHOTO_DELTA_THRESHOLD = 100
 LIGHT_DELTA_THRESHOLD = 120
 PYRO_THRESHOLD = 600
 
-# Door and passage events are linked within this time window.
-DOOR_LINK_WINDOW_SEC = 3.0
+# E-Iラインの方向はこの監視ノードで切り替え可能
+EI_DEFAULT_DIRECTION = ("I", "E")
+
+# 現在のレイアウトではI-Oラインは一方通行
+IO_GATE_OUT = ("I", "O")  # 加速度ライン
+IO_GATE_IN = ("O", "I")   # フォトリフレクターライン
 
 SENSOR_LABELS = ["Distance", "Accel(X)", "Photo", "Light", "Pyro"]
 
-# ===== Room flow settings =====
+# ===== 部屋人流設定 =====
 ROOMS = ["K", "E", "I", "O"]
 
-# One monitoring node corresponds to one gate profile.
-# For I and O, two one-way entrances are modeled explicitly.
-GATE_PROFILES = {
-    "K_to_I": ("K", "I"),
-    "I_to_K": ("I", "K"),
-    "E_to_I": ("E", "I"),
-    "I_to_E": ("I", "E"),
-    "O_to_I": ("O", "I"),
-    "I_to_O": ("I", "O"),
-}
-ACTIVE_GATE = "I_to_O"
-
-# Initial people count can be edited for each room.
+# 各部屋の初期人数はここで編集
 INITIAL_COUNTS = {
     "K": 0,
     "E": 0,
     "I": 0,
-    "O": 0,
+    "O": 10,
 }
 
 
-def init_csv_logger(path):
+def init_csv_logger(path, headers):
     file_exists = os.path.exists(path)
     need_header = (not file_exists) or os.path.getsize(path) == 0
     log_file = open(path, "a", newline="", encoding="utf-8")
     writer = csv.writer(log_file)
     if need_header:
-        writer.writerow(LOG_HEADERS)
+        writer.writerow(headers)
         log_file.flush()
     return log_file, writer
 
 
-def append_log(writer, log_file, values, from_room, to_room, event_label, room_counts):
+def append_sensor_log(writer, log_file, values):
     timestamp = datetime.now().isoformat(timespec="seconds")
     writer.writerow([
         timestamp,
@@ -95,6 +92,14 @@ def append_log(writer, log_file, values, from_room, to_room, event_label, room_c
         values[2],
         values[3],
         values[4],
+    ])
+    log_file.flush()
+
+
+def append_event_log(writer, log_file, from_room, to_room, event_label, room_counts):
+    timestamp = datetime.now().isoformat(timespec="seconds")
+    writer.writerow([
+        timestamp,
         from_room,
         to_room,
         event_label,
@@ -128,11 +133,12 @@ def main():
     pyro_sensor = PyroSensor(PYRO_THRESHOLD)
 
     room_counts = dict(INITIAL_COUNTS)
-    from_room, to_room = GATE_PROFILES[ACTIVE_GATE]
 
-    door_link_deadline = 0.0
+    last_accel_trigger = False
+    last_photo_trigger = False
 
-    log_file, log_writer = init_csv_logger(LOG_FILE)
+    sensor_log_file, sensor_log_writer = init_csv_logger(SENSOR_LOG_FILE, SENSOR_LOG_HEADERS)
+    event_log_file, event_log_writer = init_csv_logger(EVENT_LOG_FILE, EVENT_LOG_HEADERS)
 
     with serial.Serial(PORT, BAUD_RATE, timeout=1) as ser:
         print("Serial connected:", PORT)
@@ -157,7 +163,8 @@ def main():
             nonlocal latest_values
             nonlocal sample_count
             nonlocal room_counts
-            nonlocal door_link_deadline
+            nonlocal last_accel_trigger
+            nonlocal last_photo_trigger
 
             while ser.in_waiting > 0:
                 line_raw = ser.readline().decode("utf-8", errors="ignore").strip()
@@ -172,50 +179,70 @@ def main():
 
                     distance_val, accel_val, photo_val, light_val, pyro_val = values
 
-                    passage_rising, _ = distance_sensor.detect_passage_rising(distance_val)
+                    passage_rising, distance_trigger = distance_sensor.detect_passage_rising(distance_val)
                     accel_trigger = accel_sensor.detect_motion(accel_val)
                     photo_trigger = photo_sensor.detect_door_change(photo_val)
                     light_trigger = light_sensor.detect_presence_hint(light_val)
                     pyro_trigger = pyro_sensor.detect_presence(pyro_val)
 
+                    accel_rising = accel_trigger and not last_accel_trigger
+                    photo_rising = photo_trigger and not last_photo_trigger
+
                     now = time.time()
                     event_label = "idle"
                     event_from_room = ""
                     event_to_room = ""
+                    confidence = light_trigger or pyro_trigger
 
-                    if accel_trigger or photo_trigger:
-                        door_link_deadline = now + DOOR_LINK_WINDOW_SEC
-                        event_label = "door_motion"
-
+                    # E-I境界（測距センサーライン）
                     if passage_rising:
-                        if now <= door_link_deadline:
-                            event_from_room = from_room
-                            event_to_room = to_room
-                            if light_trigger or pyro_trigger:
-                                moved = apply_room_transition(room_counts, from_room, to_room)
-                                if moved:
-                                    event_label = "passage_move_confirmed"
-                                else:
-                                    event_label = "passage_blocked_no_person"
+                        event_from_room, event_to_room = EI_DEFAULT_DIRECTION
+                        if confidence:
+                            moved = apply_room_transition(room_counts, event_from_room, event_to_room)
+                            if moved:
+                                event_label = "ei_move_confirmed"
                             else:
-                                event_label = "passage_low_confidence"
+                                event_label = "ei_blocked_no_person"
                         else:
-                            event_label = "passage_only"
+                            event_label = "ei_passage_low_confidence"
 
-                    append_log(
-                        log_writer,
-                        log_file,
-                        values,
-                        event_from_room,
-                        event_to_room,
-                        event_label,
-                        room_counts,
-                    )
+                    # I->O 一方通行ゲート（加速度ライン）
+                    if accel_rising:
+                        event_from_room, event_to_room = IO_GATE_OUT
+                        moved = apply_room_transition(room_counts, event_from_room, event_to_room)
+                        if moved:
+                            event_label = "io_out_move_confirmed"
+                        else:
+                            event_label = "io_out_blocked_no_person"
+
+                    # O->I 一方通行ゲート（フォトリフレクターライン）
+                    if photo_rising:
+                        event_from_room, event_to_room = IO_GATE_IN
+                        moved = apply_room_transition(room_counts, event_from_room, event_to_room)
+                        if moved:
+                            event_label = "io_in_move_confirmed"
+                        else:
+                            event_label = "io_in_blocked_no_person"
+
+                    append_sensor_log(sensor_log_writer, sensor_log_file, values)
+
+                    if event_label != "idle":
+                        append_event_log(
+                            event_log_writer,
+                            event_log_file,
+                            event_from_room,
+                            event_to_room,
+                            event_label,
+                            room_counts,
+                        )
 
                     x_data.append(sample_count)
                     for idx, value in enumerate(values):
                         y_data[idx].append(value)
                     sample_count += 1
+
+                    last_accel_trigger = accel_trigger
+                    last_photo_trigger = photo_trigger
 
                 except ValueError:
                     print("Invalid:", line_raw)
@@ -235,7 +262,7 @@ def main():
                     for room in ROOMS
                 )
                 value_text.set_text(
-                    f"Gate: {ACTIVE_GATE} ({from_room}->{to_room})\n"
+                    f"Layout: K/E-I-O (Distance=E-I, Accel=I->O, Photo=O->I)\n"
                     f"Latest: {latest_text}\n"
                     f"Counts: {count_text}"
                 )
@@ -248,7 +275,8 @@ def main():
             plt.show()
         finally:
             ser.close()
-            log_file.close()
+            sensor_log_file.close()
+            event_log_file.close()
             print("Serial closed")
 
 
