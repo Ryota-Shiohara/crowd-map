@@ -8,13 +8,13 @@ import matplotlib.pyplot as plt
 import serial
 from matplotlib.animation import FuncAnimation
 
-from sensors import AccelSensor, DistanceSensor, LightSensor, PhotoSensor
+from sensors import AccelSensor, DistanceSensor, LightSensor, PhotoSensor, PyroSensor
 
 # ===== Communication settings =====
 PORT = "COM3"
 BAUD_RATE = 115200
 DELIMITER = ","
-CHANNEL_COUNT = 4
+CHANNEL_COUNT = 5
 
 # ===== Visualization settings =====
 MAX_POINTS = 100
@@ -29,6 +29,7 @@ LOG_HEADERS = [
     "sensor_accel",
     "sensor_photo",
     "sensor_light",
+    "sensor_pyro",
     "from_room",
     "to_room",
     "event_label",
@@ -43,11 +44,12 @@ DISTANCE_PASS_THRESHOLD = 300
 ACCEL_DELTA_THRESHOLD = 80
 PHOTO_DELTA_THRESHOLD = 100
 LIGHT_DELTA_THRESHOLD = 120
+PYRO_THRESHOLD = 600
 
 # Door and passage events are linked within this time window.
 DOOR_LINK_WINDOW_SEC = 3.0
 
-SENSOR_LABELS = ["Distance", "Accel(X)", "Photo", "Light"]
+SENSOR_LABELS = ["Distance", "Accel(X)", "Photo", "Light", "Pyro"]
 
 # ===== Room flow settings =====
 ROOMS = ["K", "E", "I", "O"]
@@ -92,6 +94,7 @@ def append_log(writer, log_file, values, from_room, to_room, event_label, room_c
         values[1],
         values[2],
         values[3],
+        values[4],
         from_room,
         to_room,
         event_label,
@@ -122,6 +125,7 @@ def main():
     accel_sensor = AccelSensor(ACCEL_DELTA_THRESHOLD)
     photo_sensor = PhotoSensor(PHOTO_DELTA_THRESHOLD)
     light_sensor = LightSensor(LIGHT_DELTA_THRESHOLD)
+    pyro_sensor = PyroSensor(PYRO_THRESHOLD)
 
     room_counts = dict(INITIAL_COUNTS)
     from_room, to_room = GATE_PROFILES[ACTIVE_GATE]
@@ -166,12 +170,13 @@ def main():
                     values = [int(part) for part in parts]
                     latest_values = values
 
-                    distance_val, accel_val, photo_val, light_val = values
+                    distance_val, accel_val, photo_val, light_val, pyro_val = values
 
                     passage_rising, _ = distance_sensor.detect_passage_rising(distance_val)
                     accel_trigger = accel_sensor.detect_motion(accel_val)
                     photo_trigger = photo_sensor.detect_door_change(photo_val)
                     light_trigger = light_sensor.detect_presence_hint(light_val)
+                    pyro_trigger = pyro_sensor.detect_presence(pyro_val)
 
                     now = time.time()
                     event_label = "idle"
@@ -186,7 +191,7 @@ def main():
                         if now <= door_link_deadline:
                             event_from_room = from_room
                             event_to_room = to_room
-                            if light_trigger:
+                            if light_trigger or pyro_trigger:
                                 moved = apply_room_transition(room_counts, from_room, to_room)
                                 if moved:
                                     event_label = "passage_move_confirmed"
