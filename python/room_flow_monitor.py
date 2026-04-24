@@ -51,8 +51,9 @@ PHOTO_DELTA_THRESHOLD = 100
 LIGHT_DELTA_THRESHOLD = 120
 PYRO_THRESHOLD = 600
 
-# E-Iラインの方向はこの監視ノードで切り替え可能
-EI_DEFAULT_DIRECTION = ("I", "E")
+# E-Iラインの方向は焦電センサーのエッジで自動検知
+# 焦電 0→1（接近）= I→E、焦電 1→0（離脱）= E→I
+EI_DIRECTION_AUTO_DETECT = True
 
 # 現在のレイアウトではI-Oラインは一方通行
 IO_GATE_OUT = ("I", "O")  # 加速度ライン
@@ -134,9 +135,6 @@ def main():
 
     room_counts = dict(INITIAL_COUNTS)
 
-    last_accel_trigger = False
-    last_photo_trigger = False
-
     sensor_log_file, sensor_log_writer = init_csv_logger(SENSOR_LOG_FILE, SENSOR_LOG_HEADERS)
     event_log_file, event_log_writer = init_csv_logger(EVENT_LOG_FILE, EVENT_LOG_HEADERS)
 
@@ -163,8 +161,6 @@ def main():
             nonlocal latest_values
             nonlocal sample_count
             nonlocal room_counts
-            nonlocal last_accel_trigger
-            nonlocal last_photo_trigger
 
             while ser.in_waiting > 0:
                 line_raw = ser.readline().decode("utf-8", errors="ignore").strip()
@@ -179,24 +175,33 @@ def main():
 
                     distance_val, accel_val, photo_val, light_val, pyro_val = values
 
-                    passage_rising, distance_trigger = distance_sensor.detect_passage_rising(distance_val)
-                    accel_trigger = accel_sensor.detect_motion(accel_val)
-                    photo_trigger = photo_sensor.detect_door_change(photo_val)
+                    passage_rising, _ = distance_sensor.detect_passage_rising(distance_val)
+                    accel_rising = accel_sensor.detect_rising(accel_val)
+                    photo_rising = photo_sensor.detect_rising(photo_val)
                     light_trigger = light_sensor.detect_presence_hint(light_val)
-                    pyro_trigger = pyro_sensor.detect_presence(pyro_val)
+                    pyro_rising, pyro_falling = pyro_sensor.detect_edges(pyro_val)
 
-                    accel_rising = accel_trigger and not last_accel_trigger
-                    photo_rising = photo_trigger and not last_photo_trigger
-
-                    now = time.time()
                     event_label = "idle"
                     event_from_room = ""
                     event_to_room = ""
-                    confidence = light_trigger or pyro_trigger
+                    confidence = light_trigger
 
                     # E-I境界（測距センサーライン）
                     if passage_rising:
-                        event_from_room, event_to_room = EI_DEFAULT_DIRECTION
+                        # 焦電エッジで方向判定
+                        if EI_DIRECTION_AUTO_DETECT:
+                            if pyro_rising:
+                                # 焦電が 0→1: 人がセンサーに接近中 = I→E（Iから来た）
+                                event_from_room, event_to_room = "I", "E"
+                            elif pyro_falling:
+                                # 焦電が 1→0: 人がセンサーから離脱 = E→I（Eから来た）
+                                event_from_room, event_to_room = "E", "I"
+                            else:
+                                # 焦電が安定中（判定スキップ）
+                                event_label = "ei_passage_unclear_pyro_stable"
+                        else:
+                            event_from_room, event_to_room = "I", "E"  # フォールバック
+
                         if confidence:
                             moved = apply_room_transition(room_counts, event_from_room, event_to_room)
                             if moved:
@@ -240,9 +245,6 @@ def main():
                     for idx, value in enumerate(values):
                         y_data[idx].append(value)
                     sample_count += 1
-
-                    last_accel_trigger = accel_trigger
-                    last_photo_trigger = photo_trigger
 
                 except ValueError:
                     print("Invalid:", line_raw)
