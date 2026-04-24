@@ -64,6 +64,11 @@ SENSOR_LABELS = ["Distance", "Accel(X)", "Photo", "Light", "Pyro"]
 # ===== 部屋人流設定 =====
 ROOMS = ["K", "E", "I", "O"]
 
+# Kには同時に1人までしか入れない
+ROOM_CAPACITY = {
+    "K": 1,
+}
+
 # 各部屋の初期人数はここで編集
 INITIAL_COUNTS = {
     "K": 0,
@@ -115,6 +120,11 @@ def append_event_log(writer, log_file, from_room, to_room, event_label, room_cou
 def apply_room_transition(room_counts, from_room, to_room):
     if room_counts[from_room] <= 0:
         return False
+
+    capacity = ROOM_CAPACITY.get(to_room)
+    if capacity is not None and room_counts[to_room] >= capacity:
+        return False
+
     room_counts[from_room] -= 1
     room_counts[to_room] += 1
     return True
@@ -178,13 +188,29 @@ def main():
                     passage_rising, _ = distance_sensor.detect_passage_rising(distance_val)
                     accel_rising = accel_sensor.detect_rising(accel_val)
                     photo_rising = photo_sensor.detect_rising(photo_val)
-                    light_trigger = light_sensor.detect_presence_hint(light_val)
+                    _, light_rising, light_falling = light_sensor.detect_light_edges(light_val)
                     pyro_rising, pyro_falling = pyro_sensor.detect_edges(pyro_val)
 
                     event_label = "idle"
                     event_from_room = ""
                     event_to_room = ""
-                    confidence = light_trigger
+
+                    # 光ONで I->K、光OFFで K->I とみなす
+                    if light_rising:
+                        event_from_room, event_to_room = "I", "K"
+                        moved = apply_room_transition(room_counts, event_from_room, event_to_room)
+                        if moved:
+                            event_label = "ik_move_confirmed"
+                        else:
+                            event_label = "ik_blocked"
+
+                    if light_falling:
+                        event_from_room, event_to_room = "K", "I"
+                        moved = apply_room_transition(room_counts, event_from_room, event_to_room)
+                        if moved:
+                            event_label = "ki_move_confirmed"
+                        else:
+                            event_label = "ki_blocked"
 
                     # E-I境界（測距センサーライン）
                     if passage_rising:
@@ -202,14 +228,12 @@ def main():
                         else:
                             event_from_room, event_to_room = "I", "E"  # フォールバック
 
-                        if confidence:
-                            moved = apply_room_transition(room_counts, event_from_room, event_to_room)
-                            if moved:
-                                event_label = "ei_move_confirmed"
-                            else:
-                                event_label = "ei_blocked_no_person"
-                        else:
-                            event_label = "ei_passage_low_confidence"
+                            if event_from_room and event_to_room:
+                                moved = apply_room_transition(room_counts, event_from_room, event_to_room)
+                                if moved:
+                                    event_label = "ei_move_confirmed"
+                                else:
+                                    event_label = "ei_blocked_no_person"
 
                     # I->O 一方通行ゲート（加速度ライン）
                     if accel_rising:
