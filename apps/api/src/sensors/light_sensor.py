@@ -4,10 +4,6 @@ class LightSensor:
         self.baseline = None
         self.is_lit = None
 
-    def detect_presence_hint(self, value):
-        lit, _, _ = self.detect_light_edges(value)
-        return lit
-
     def detect_light_edges(self, value):
         if self.baseline is None:
             self.baseline = value
