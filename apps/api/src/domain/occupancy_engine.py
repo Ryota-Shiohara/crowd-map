@@ -18,11 +18,15 @@ class OccupancyEngine:
         light_delta_threshold: int,
         pyro_threshold: int,
         ei_use_pyro_for_decision: bool = True,
+        io_slide_photo_use_rising: bool = True,
+        io_photo_use_rising: bool = True,
         ei_direction_auto_detect: bool = True,
     ):
         self.room_counts = dict(initial_counts)
         self.room_capacity = room_capacity
         self.ei_use_pyro_for_decision = ei_use_pyro_for_decision
+        self.io_slide_photo_use_rising = io_slide_photo_use_rising
+        self.io_photo_use_rising = io_photo_use_rising
         self.ei_direction_auto_detect = ei_direction_auto_detect
 
         self.distance_sensor = DistanceSensor(distance_pass_threshold)
@@ -47,8 +51,19 @@ class OccupancyEngine:
         distance_val, slide_photo_val, photo_val, light_val, pyro_val = values
 
         passage_rising, _ = self.distance_sensor.detect_passage_rising(distance_val)
-        slide_photo_rising = self.slide_photo_sensor.detect_rising(slide_photo_val)
-        photo_rising = self.photo_sensor.detect_rising(photo_val)
+        
+        # I/O ゲート: フラグに応じてエッジ選択
+        slide_photo_event = (
+            self.slide_photo_sensor.detect_rising(slide_photo_val)
+            if self.io_slide_photo_use_rising
+            else self.slide_photo_sensor.detect_falling(slide_photo_val)
+        )
+        photo_event = (
+            self.photo_sensor.detect_rising(photo_val)
+            if self.io_photo_use_rising
+            else self.photo_sensor.detect_falling(photo_val)
+        )
+        
         _, light_rising, light_falling = self.light_sensor.detect_light_edges(light_val)
         pyro_rising = False
         pyro_falling = False
@@ -98,12 +113,12 @@ class OccupancyEngine:
                 moved = self.apply_room_transition(event_from_room, event_to_room)
                 event_label = "ei_move_confirmed" if moved else "ei_blocked_no_person"
 
-        if slide_photo_rising:
+        if slide_photo_event:
             event_from_room, event_to_room = self.IO_GATE_OUT
             moved = self.apply_room_transition(event_from_room, event_to_room)
             event_label = "io_out_move_confirmed" if moved else "io_out_blocked_no_person"
 
-        if photo_rising:
+        if photo_event:
             event_from_room, event_to_room = self.IO_GATE_IN
             moved = self.apply_room_transition(event_from_room, event_to_room)
             event_label = "io_in_move_confirmed" if moved else "io_in_blocked_no_person"

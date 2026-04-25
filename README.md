@@ -134,6 +134,8 @@ pip install -r apps/api/requirements.txt
 2. `apps/api/.env.example` をコピーして `.env` を作成し、`CROWD_SERIAL_PORT` を設定する
   - `CROWD_EI_USE_PYRO_FOR_DECISION=false` にすると、I/E 判定で焦電センサーを使わない
   - その場合、Eに人がいれば `E -> I`、Eに人がいないかつIに人がいれば `I -> E` として判定する（Eは1人上限の前提）
+   - `CROWD_IO_SLIDE_PHOTO_USE_RISING=false` でスライド扉センサーを下降エッジで検知
+   - `CROWD_IO_PHOTO_USE_RISING=false` で通常フォトセンサーを下降エッジで検知
 3. API を起動する
 
 ```bash

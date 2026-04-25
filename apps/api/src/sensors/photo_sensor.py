@@ -15,3 +15,9 @@ class PhotoSensor:
         is_rising = current and not self.last_state
         self.last_state = current
         return is_rising
+
+    def detect_falling(self, value):
+        current = self.detect_door_change(value)
+        is_falling = (not current) and self.last_state
+        self.last_state = current
+        return is_falling
