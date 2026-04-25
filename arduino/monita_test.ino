@@ -1,7 +1,7 @@
-int sensorPin0 = A0;  // 測距センサー
+int sensorPin0 = A3;  // 測距センサー
 int sensorPin1 = A1;  // フォトリフレクタ (スライド扉)
 int sensorPin2 = A2;  // フォトリフレクタ (O->Iゲート)
-int sensorPin3 = A3;  // 光センサー
+int sensorPin3 = A0;  // 光センサー
 int sensorPin4 = A4;  // 焦電センサー
 
 void setup() {
