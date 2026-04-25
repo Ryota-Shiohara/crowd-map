@@ -29,6 +29,7 @@ class SerialWorker:
             photo_delta_threshold=settings.photo_delta_threshold,
             light_delta_threshold=settings.light_delta_threshold,
             pyro_threshold=settings.pyro_threshold,
+            ei_use_pyro_for_decision=settings.ei_use_pyro_for_decision,
             ei_direction_auto_detect=settings.ei_direction_auto_detect,
         )
 

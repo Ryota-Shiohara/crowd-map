@@ -26,6 +26,7 @@ class Settings:
     photo_delta_threshold: int = int(os.getenv("CROWD_PHOTO_DELTA_THRESHOLD", "100"))
     light_delta_threshold: int = int(os.getenv("CROWD_LIGHT_DELTA_THRESHOLD", "120"))
     pyro_threshold: int = int(os.getenv("CROWD_PYRO_THRESHOLD", "600"))
+    ei_use_pyro_for_decision: bool = os.getenv("CROWD_EI_USE_PYRO_FOR_DECISION", "true").lower() == "true"
 
     sensor_log_file: str = os.getenv("CROWD_SENSOR_LOG_FILE", str(DATA_DIR / "sensor_log.csv"))
     event_log_file: str = os.getenv("CROWD_EVENT_LOG_FILE", str(DATA_DIR / "event_log.csv"))

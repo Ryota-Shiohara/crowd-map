@@ -17,10 +17,12 @@ class OccupancyEngine:
         photo_delta_threshold: int,
         light_delta_threshold: int,
         pyro_threshold: int,
+        ei_use_pyro_for_decision: bool = True,
         ei_direction_auto_detect: bool = True,
     ):
         self.room_counts = dict(initial_counts)
         self.room_capacity = room_capacity
+        self.ei_use_pyro_for_decision = ei_use_pyro_for_decision
         self.ei_direction_auto_detect = ei_direction_auto_detect
 
         self.distance_sensor = DistanceSensor(distance_pass_threshold)
@@ -48,7 +50,10 @@ class OccupancyEngine:
         slide_photo_rising = self.slide_photo_sensor.detect_rising(slide_photo_val)
         photo_rising = self.photo_sensor.detect_rising(photo_val)
         _, light_rising, light_falling = self.light_sensor.detect_light_edges(light_val)
-        pyro_rising, pyro_falling = self.pyro_sensor.detect_edges(pyro_val)
+        pyro_rising = False
+        pyro_falling = False
+        if self.ei_use_pyro_for_decision:
+            pyro_rising, pyro_falling = self.pyro_sensor.detect_edges(pyro_val)
 
         event_label = "idle"
         event_from_room = ""
@@ -65,13 +70,25 @@ class OccupancyEngine:
             event_label = "ki_move_confirmed" if moved else "ki_blocked"
 
         if passage_rising:
-            if self.ei_direction_auto_detect:
+            if self.ei_direction_auto_detect and self.ei_use_pyro_for_decision:
                 if pyro_rising:
                     event_from_room, event_to_room = "I", "E"
                 elif pyro_falling:
                     event_from_room, event_to_room = "E", "I"
                 else:
                     event_label = "ei_passage_unclear_pyro_stable"
+
+                if event_from_room and event_to_room:
+                    moved = self.apply_room_transition(event_from_room, event_to_room)
+                    event_label = "ei_move_confirmed" if moved else "ei_blocked_no_person"
+            elif not self.ei_use_pyro_for_decision:
+                # Without pyro direction hints, treat E as single-occupancy and resolve direction from counts.
+                if self.room_counts["E"] > 0:
+                    event_from_room, event_to_room = "E", "I"
+                elif self.room_counts["E"] < 1 and self.room_counts["I"] > 0:
+                    event_from_room, event_to_room = "I", "E"
+                else:
+                    event_label = "ei_blocked_no_person"
 
                 if event_from_room and event_to_room:
                     moved = self.apply_room_transition(event_from_room, event_to_room)
