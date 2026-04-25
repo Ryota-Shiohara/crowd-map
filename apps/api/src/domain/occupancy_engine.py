@@ -1,6 +1,6 @@
 from typing import List, Optional, Tuple
 
-from ..sensors import AccelSensor, DistanceSensor, LightSensor, PhotoSensor, PyroSensor
+from ..sensors import DistanceSensor, LightSensor, PhotoSensor, PyroSensor
 
 
 class OccupancyEngine:
@@ -13,7 +13,7 @@ class OccupancyEngine:
         initial_counts: dict,
         room_capacity: dict,
         distance_pass_threshold: int,
-        accel_delta_threshold: int,
+        slide_photo_delta_threshold: int,
         photo_delta_threshold: int,
         light_delta_threshold: int,
         pyro_threshold: int,
@@ -24,7 +24,7 @@ class OccupancyEngine:
         self.ei_direction_auto_detect = ei_direction_auto_detect
 
         self.distance_sensor = DistanceSensor(distance_pass_threshold)
-        self.accel_sensor = AccelSensor(accel_delta_threshold)
+        self.slide_photo_sensor = PhotoSensor(slide_photo_delta_threshold)
         self.photo_sensor = PhotoSensor(photo_delta_threshold)
         self.light_sensor = LightSensor(light_delta_threshold)
         self.pyro_sensor = PyroSensor(pyro_threshold)
@@ -42,10 +42,10 @@ class OccupancyEngine:
         return True
 
     def process_values(self, values: List[int]) -> Optional[Tuple[str, str, str, dict]]:
-        distance_val, accel_val, photo_val, light_val, pyro_val = values
+        distance_val, slide_photo_val, photo_val, light_val, pyro_val = values
 
         passage_rising, _ = self.distance_sensor.detect_passage_rising(distance_val)
-        accel_rising = self.accel_sensor.detect_rising(accel_val)
+        slide_photo_rising = self.slide_photo_sensor.detect_rising(slide_photo_val)
         photo_rising = self.photo_sensor.detect_rising(photo_val)
         _, light_rising, light_falling = self.light_sensor.detect_light_edges(light_val)
         pyro_rising, pyro_falling = self.pyro_sensor.detect_edges(pyro_val)
@@ -81,7 +81,7 @@ class OccupancyEngine:
                 moved = self.apply_room_transition(event_from_room, event_to_room)
                 event_label = "ei_move_confirmed" if moved else "ei_blocked_no_person"
 
-        if accel_rising:
+        if slide_photo_rising:
             event_from_room, event_to_room = self.IO_GATE_OUT
             moved = self.apply_room_transition(event_from_room, event_to_room)
             event_label = "io_out_move_confirmed" if moved else "io_out_blocked_no_person"

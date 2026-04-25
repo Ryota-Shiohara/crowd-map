@@ -25,7 +25,7 @@ class SerialWorker:
             initial_counts=settings.initial_counts,
             room_capacity=settings.room_capacity,
             distance_pass_threshold=settings.distance_pass_threshold,
-            accel_delta_threshold=settings.accel_delta_threshold,
+            slide_photo_delta_threshold=settings.slide_photo_delta_threshold,
             photo_delta_threshold=settings.photo_delta_threshold,
             light_delta_threshold=settings.light_delta_threshold,
             pyro_threshold=settings.pyro_threshold,

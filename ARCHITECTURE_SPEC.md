@@ -32,7 +32,7 @@
 - 規定周期で CSV 送信
 
 想定出力フォーマット:
-- sensor_distance,sensor_accel,sensor_photo,sensor_light,sensor_pyro
+- sensor_distance,sensor_photo_slide,sensor_photo,sensor_light,sensor_pyro
 
 通信:
 - USB Serial 115200 bps

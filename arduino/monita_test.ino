@@ -1,8 +1,8 @@
-int sensorPin0 = A0;  // センサー1
-int sensorPin1 = A1;  // センサー2
-int sensorPin2 = A2;  // センサー3
-int sensorPin3 = A3;  // センサー4
-int sensorPin4 = A4;  // センサー5 (焦電)
+int sensorPin0 = A0;  // 測距センサー
+int sensorPin1 = A1;  // フォトリフレクタ (スライド扉)
+int sensorPin2 = A2;  // フォトリフレクタ (O->Iゲート)
+int sensorPin3 = A3;  // 光センサー
+int sensorPin4 = A4;  // 焦電センサー
 
 void setup() {
   Serial.begin(115200);  // シリアル通信開始

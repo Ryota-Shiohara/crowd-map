@@ -20,7 +20,9 @@ class Settings:
     port: int = int(os.getenv("CROWD_API_PORT", "8000"))
 
     distance_pass_threshold: int = int(os.getenv("CROWD_DISTANCE_PASS_THRESHOLD", "300"))
-    accel_delta_threshold: int = int(os.getenv("CROWD_ACCEL_DELTA_THRESHOLD", "80"))
+    slide_photo_delta_threshold: int = int(
+        os.getenv("CROWD_SLIDE_PHOTO_DELTA_THRESHOLD", os.getenv("CROWD_ACCEL_DELTA_THRESHOLD", "80"))
+    )
     photo_delta_threshold: int = int(os.getenv("CROWD_PHOTO_DELTA_THRESHOLD", "100"))
     light_delta_threshold: int = int(os.getenv("CROWD_LIGHT_DELTA_THRESHOLD", "120"))
     pyro_threshold: int = int(os.getenv("CROWD_PYRO_THRESHOLD", "600"))

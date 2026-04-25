@@ -6,7 +6,7 @@ from datetime import datetime
 SENSOR_LOG_HEADERS = [
     "timestamp",
     "sensor_distance",
-    "sensor_accel",
+    "sensor_photo_slide",
     "sensor_photo",
     "sensor_light",
     "sensor_pyro",

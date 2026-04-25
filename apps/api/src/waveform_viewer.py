@@ -6,14 +6,14 @@ import serial
 from matplotlib.animation import FuncAnimation
 
 from config import settings
-from sensors import AccelSensor, DistanceSensor, LightSensor, PhotoSensor, PyroSensor
+from sensors import DistanceSensor, LightSensor, PhotoSensor, PyroSensor
 
 CHANNEL_COUNT = 5
 MAX_POINTS = 100
 Y_MIN = 0
 Y_MAX = 1023
 DELIMITER = ","
-SENSOR_LABELS = ["Distance", "Accel(X)", "Photo", "Light", "Pyro"]
+SENSOR_LABELS = ["Distance", "Photo(Slide)", "Photo", "Light", "Pyro"]
 
 
 def main():
@@ -25,7 +25,7 @@ def main():
 
     # センサー初期化だけ行い、波形表示に必要な値の流れを見やすくする
     distance_sensor = DistanceSensor(settings.distance_pass_threshold)
-    accel_sensor = AccelSensor(settings.accel_delta_threshold)
+    slide_photo_sensor = PhotoSensor(settings.slide_photo_delta_threshold)
     photo_sensor = PhotoSensor(settings.photo_delta_threshold)
     light_sensor = LightSensor(settings.light_delta_threshold)
     pyro_sensor = PyroSensor(settings.pyro_threshold)
@@ -65,11 +65,11 @@ def main():
                     continue
 
                 latest_values = values
-                distance_val, accel_val, photo_val, light_val, pyro_val = values
+                distance_val, slide_photo_val, photo_val, light_val, pyro_val = values
 
                 # センサーの状態更新は保持しておくと、波形を見るときに判定の切り替わりが追いやすい
                 distance_sensor.detect_passage_rising(distance_val)
-                accel_sensor.detect_rising(accel_val)
+                slide_photo_sensor.detect_rising(slide_photo_val)
                 photo_sensor.detect_rising(photo_val)
                 light_sensor.detect_light_edges(light_val)
                 pyro_sensor.detect_edges(pyro_val)
