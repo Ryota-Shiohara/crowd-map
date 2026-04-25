@@ -6,8 +6,8 @@ from dotenv import load_dotenv
 
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
-DATA_DIR = ROOT_DIR / "data" / "logs"
 APP_DIR = Path(__file__).resolve().parents[1]
+DATA_DIR = ROOT_DIR / "data" / "logs"
 
 load_dotenv(APP_DIR / ".env")
 
@@ -34,7 +34,6 @@ class Settings:
     initial_count_o: int = int(os.getenv("CROWD_INITIAL_COUNT_O", "10"))
 
     capacity_k: int = int(os.getenv("CROWD_CAPACITY_K", "1"))
-
     ei_direction_auto_detect: bool = os.getenv("CROWD_EI_DIRECTION_AUTO_DETECT", "true").lower() == "true"
 
     @property

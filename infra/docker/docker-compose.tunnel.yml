@@ -3,9 +3,9 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: crowd-map-cloudflared
     restart: unless-stopped
-    command: tunnel --config /etc/cloudflared/config.yml run
-    volumes:
-      - ./cloudflared:/etc/cloudflared
+    command: tunnel run --token ${CLOUDFLARED_TUNNEL_TOKEN}
+    env_file:
+      - .env
     environment:
       - TZ=Asia/Tokyo
     healthcheck:
